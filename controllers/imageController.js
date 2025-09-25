@@ -141,3 +141,56 @@ exports.saveImageProcess = async (req, res) => {
     res.status(500).json({ error: 'Failed to save processed image', details: err.message });
   }
 };
+
+
+//display logged in user's processed images
+
+
+exports.getUserProcessedImages = async (req, res) => {
+  try {
+    // Verify access token
+    const token = req.cookies.accessToken;
+    if (!token) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.id;
+    console.log("Fetching processed images for user:", userId);
+
+    // Query processed images by UserId
+    const pool = await sql.connect();
+    const result = await pool.request()
+      .input('UserId', sql.Int, userId)
+      .query(`
+        SELECT 
+          ImageProcessId,
+          UserId,
+          ImageId,
+          ProcessedFileSize,
+          ProcessedFile,
+          ProcessStart,
+          ProcessEnd,
+          UpdatedOn
+        FROM ImageProcess
+        WHERE UserId = @UserId
+        ORDER BY UpdatedOn DESC
+      `);
+
+    //Convert binary data into base64 URLs for frontend
+    const images = result.recordset.map(row => ({
+      imageProcessId: row.ImageProcessId,
+      imageId: row.ImageId,
+      size: row.ProcessedFileSize,
+      uploadedOn: row.UpdatedOn,
+      url: row.ProcessedFile 
+        ? `data:image/png;base64,${row.ProcessedFile.toString('base64')}`
+        : null
+    }));
+
+    res.status(200).json(images);
+  } catch (err) {
+    console.error('Fetch Processed Images Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch processed images', details: err.message });
+  }
+};

@@ -32,7 +32,8 @@ router.post("/rotate", verifyToken, upload.single("uploadedFile"),imageControlle
 router.post('/upscale',upload.single("uploadedFile"),imageController.upscaleImage)
 //save image method
 router.post('/save-image',upload.single("processedFile"),imageController.saveImageProcess);
-
+//logged in user's processed image method
+router.get('/user-images',imageController.getUserProcessedImages);
 
 
 
