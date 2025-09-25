@@ -1,4 +1,9 @@
 const sharp = require("sharp");
+const multer = require('multer');
+const upload = multer();
+const sql = require('mssql');
+const jwt = require('jsonwebtoken')
+
 exports. rotateImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -88,53 +93,51 @@ exports.upscaleImage = async (req, res) => {
 
 
 
+// processed image to sql database
 
+exports.saveImageProcess = async (req, res) => {
+  try {
+    // 1️⃣ Get userId from accessToken cookie
+    const token = req.cookies.accessToken;
+    if (!token) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.id; // same as in uploadImage
+    console.log("userid:", userId);
 
+    const { imageId, processedFileSize, actionId } = req.body;
+    const processedFile = req.file;
 
+    if (!processedFile) {
+      return res.status(400).json({ error: 'No processed file uploaded' });
+    }
 
+    const pool = await sql.connect();
+    await pool.request()
+      .input('UserId', sql.Int, userId) // <-- add userId
+      .input('ImageId', sql.Int, parseInt(imageId))
+      .input('ProcessedFileSize', sql.Int, parseInt(processedFileSize) || 0)
+      .input('ProcessedFile', sql.VarBinary(sql.MAX), processedFile.buffer)
+      .input('ActionId', sql.UniqueIdentifier, actionId || null)
+      .input('ProcessedOn', sql.DateTime, new Date())
+      .query(`
+        INSERT INTO ImageProcess (
+          ImageProcessId, UserId, ImageId, ProcessedFileSize,
+          ProcessStart, ProcessEnd, ProcessedFile, ActionId,
+          UpdatedOn
+        )
+        VALUES (
+          NEWID(), @UserId, @ImageId, @ProcessedFileSize,
+          GETDATE(), GETDATE(), @ProcessedFile,
+          @ActionId, GETDATE()
+        )
+      `);
 
-// const Jimp = require('jimp').default; // ✅ This is the key fix
-
-// exports.upscaleImage = async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ error: "No file uploaded" });
-//     }
-
-//     const { option } = req.body;
-//     const scale = parseFloat(option);
-
-//     if (isNaN(scale) || scale <= 1) {
-//       return res.status(400).json({ error: "Invalid upscale factor" });
-//     }
-
-//     console.log("Received file size:", req.file.buffer.length, "bytes");
-
-//     let image;
-//     try {
-//       image = await Jimp.read(req.file.buffer); // ✅ Now this works
-//     } catch (imgErr) {
-//       console.error("Jimp failed to read image:", imgErr);
-//       return res.status(400).json({ error: "Unsupported or corrupted image format" });
-//     }
-
-//     const originalWidth = image.bitmap.width;
-//     const originalHeight = image.bitmap.height;
-
-//     const newWidth = Math.round(originalWidth * scale);
-//     const newHeight = Math.round(originalHeight * scale);
-
-//     image.resize(newWidth, newHeight, Jimp.RESIZE_LANCZOS3);
-//     image.contrast(0.1); // Optional sharpening
-
-//     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
-//     const base64Image = `data:image/png;base64,${buffer.toString('base64')}`;
-
-//     res.json({ image: base64Image });
-
-//   } catch (err) {
-//     console.error("Upscale failed:", err);
-//     res.status(500).json({ error: err.message || "Image upscaling failed" });
-//   }
-// };
+    res.status(200).json({ message: 'Processed image saved successfully' });
+  } catch (err) {
+    console.error('Save Image Process Error:', err.message);
+    res.status(500).json({ error: 'Failed to save processed image', details: err.message });
+  }
+};

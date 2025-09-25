@@ -30,6 +30,13 @@ router.get('/profile', verifyToken, (req, res) => {
 router.post("/rotate", verifyToken, upload.single("uploadedFile"),imageController.rotateImage);
 //upscale image method
 router.post('/upscale',upload.single("uploadedFile"),imageController.upscaleImage)
+//save image method
+router.post('/save-image',upload.single("processedFile"),imageController.saveImageProcess);
+
+
+
+
+
 
 module.exports =router;
 
